@@ -214,8 +214,8 @@ export default function WorkspaceScreen() {
           onSelect={() => {
             setSelecting(!selecting);
             setSelection(null);
-            // History above the screen, so a selection can start before what fits on it.
-            if (!selecting && !s.historyMode) void session.openHistory(term.current?.cols() ?? 0);
+            // History above the screen, so a selection can start before what fits on it; without any, the screen alone.
+            if (!selecting && !s.historyMode) void session.openHistory(term.current?.cols() ?? 0, true);
           }}
         />
 

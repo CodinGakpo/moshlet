@@ -586,7 +586,7 @@ export class HostSession {
   // ---------------------------------------------------------------- history
 
   /** The History button: herdr's history above the screen, read at one content revision and laid out locally. */
-  async openHistory(cols: number): Promise<void> {
+  async openHistory(cols: number, quiet = false): Promise<void> {
     const paneId = get().paneId;
     if (!paneId || cols <= 0) return;
     try {
@@ -602,7 +602,7 @@ export class HostSession {
       }
       if (get().paneId !== paneId) return;
       if (lines.length === 0) {
-        toast("No history outside the app here. Drag the terminal to scroll the app itself.");
+        if (!quiet) toast("No history outside the app here. Drag the terminal to scroll the app itself.");
         return;
       }
       this.update({ scrollback: layoutScrollback(lines, cols), historyMode: true });
