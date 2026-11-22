@@ -33,6 +33,8 @@ export interface Frame {
   width: number;
   height: number;
   focused: boolean;
+  /** Rows picked to copy (numbered history first, then the live screen), shown highlighted. */
+  selection?: { from: number; to: number } | null;
 }
 
 const VS16 = "\ufe0f";
@@ -168,6 +170,14 @@ export class Renderer {
     }
 
     this.drawCursor(canvas, f, shift + (h + s.cursorY - first) * this.cellH, ox, drawCols);
+
+    if (f.selection) {
+      const sel = Skia.Paint();
+      sel.setColor(this.color(this.palette.cursor));
+      sel.setAlphaf(0.3);
+      const top = shift + (f.selection.from - first) * this.cellH;
+      canvas.drawRect(Skia.XYWHRect(0, top, f.width, (f.selection.to - f.selection.from + 1) * this.cellH), sel);
+    }
   }
 
   private drawCursor(canvas: SkCanvas, f: Frame, cy: number, ox: number, drawCols: number): void {

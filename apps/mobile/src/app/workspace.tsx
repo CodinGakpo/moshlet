@@ -1,5 +1,6 @@
 import { agentIn, appOwnsScroll, orderedPanes, primaryPane, tabName, tabsOf } from "@moshlet/core";
 import { useBottomSheetModal, type BottomSheetModal } from "@gorhom/bottom-sheet";
+import * as Clipboard from "expo-clipboard";
 import { Redirect, useRouter } from "expo-router";
 import { ChevronDown } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
@@ -13,7 +14,7 @@ import { setFontSize } from "../lib/appearance";
 import { hostKeyCommand } from "../lib/ssh";
 import { activeSession, closeHost } from "../lib/session";
 import { useShallow } from "zustand/react/shallow";
-import { useApp } from "../lib/store";
+import { toast, useApp } from "../lib/store";
 import { TerminalView, type TerminalViewHandle } from "../terminal/TerminalView";
 import { confirm } from "../ui/Confirm";
 import { Pill, StatusGlyph } from "../ui/kit";
@@ -54,6 +55,8 @@ export default function WorkspaceScreen() {
   const [termFocused, setTermFocused] = useState(false);
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selection, setSelection] = useState<{ from: number; to: number } | null>(null);
   const term = useRef<TerminalViewHandle>(null);
   const approval = useRef<ApprovalSheetHandle>(null);
   const paneMap = useRef<BottomSheetModal>(null);
@@ -107,6 +110,9 @@ export default function WorkspaceScreen() {
     lastStatus.current = st;
   }, [agent?.agent_status, s.paneId]);
 
+  // Row numbers count history rows, so a selection doesn't survive history opening, closing or another pane.
+  useEffect(() => setSelection(null), [s.historyMode, s.scrollback, s.paneId]);
+
   if (!session) return <Redirect href="/" />;
 
   const openPane = (id: string) => {
@@ -117,6 +123,17 @@ export default function WorkspaceScreen() {
     const p = snap && primaryPane(snap, tabId);
     if (p) openPane(p.pane_id);
   };
+  const endSelect = () => {
+    setSelecting(false);
+    setSelection(null);
+  };
+  const copy = (from: number, to: number) => {
+    const text = term.current?.text(from, to) ?? "";
+    void Clipboard.setStringAsync(text);
+    toast(`Copied ${text.split("\n").length} lines.`);
+    endSelect();
+  };
+
   const swipe = (dir: 1 | -1) => {
     if (panesInTab.length < 2) return;
     const next = panesInTab[(paneIndex - 1 + dir + panesInTab.length) % panesInTab.length];
@@ -192,6 +209,14 @@ export default function WorkspaceScreen() {
           onNewTab={() => ws && session.newTab(ws.workspace_id)}
           onHistory={() => (s.historyMode ? session.closeHistory() : void session.openHistory(term.current?.cols() ?? 0))}
           onPaneMap={() => paneMap.current?.present()}
+          onCopyReply={() => void session.copyLastReply()}
+          selecting={selecting}
+          onSelect={() => {
+            setSelecting(!selecting);
+            setSelection(null);
+            // History above the screen, so a selection can start before what fits on it; without any, the screen alone.
+            if (!selecting && !s.historyMode) void session.openHistory(term.current?.cols() ?? 0, true);
+          }}
         />
 
         <View className="mx-1.5 flex-1 overflow-hidden rounded-lg border border-terminal-border bg-terminal px-1 py-1.5">
@@ -215,14 +240,33 @@ export default function WorkspaceScreen() {
             onSwipe={swipe}
             onLongPress={() => paneMap.current?.present()}
             onFontSize={setFontSize}
-            onLeaveHistory={() => session.closeHistory()}
+            onLeaveHistory={() => !selecting && session.closeHistory()}
             onRemoteScroll={(n, down) => {
               session.setRemoteScroll(n, down);
               setScrolledUp(n > 0);
             }}
             onTouchStart={() => session.nudge()}
             onFocusChange={setTermFocused}
+            selecting={selecting}
+            selection={selection}
+            onSelectRow={(row) =>
+              // The first tap marks a row, the second extends to it, the next starts again.
+              setSelection((sel) => (sel && sel.from === sel.to ? { from: Math.min(sel.from, row), to: Math.max(sel.from, row) } : { from: row, to: row }))
+            }
           />
+          {selecting && (
+            <View className="absolute left-2.5 right-2.5 top-2.5 flex-row flex-wrap items-center justify-end gap-2">
+              {selection ? (
+                <>
+                  <Pill label="Copy" tone="brand" height={34} onPress={() => copy(selection.from, selection.to)} />
+                  <Pill label="Copy to end" tone="brand" height={34} onPress={() => copy(selection.from, Number.MAX_SAFE_INTEGER)} />
+                </>
+              ) : (
+                <Pill label="Tap a line to start" tone="muted" height={34} onPress={() => {}} />
+              )}
+              <Pill label="Done" tone="muted" height={34} onPress={() => endSelect()} />
+            </View>
+          )}
           {agent?.agent_status === "blocked" && (
             <Pill
               label="Needs approval"
