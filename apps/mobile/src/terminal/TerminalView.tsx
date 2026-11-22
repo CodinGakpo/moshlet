@@ -1,4 +1,4 @@
-import { KeyField, type Cell, type MoshClient, type Screen } from "@moshlet/core";
+import { KeyField, rowsText, type Cell, type MoshClient, type Screen } from "@moshlet/core";
 import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AppState, Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
@@ -16,6 +16,8 @@ export interface TerminalViewHandle {
   /** Scrolls the live pane back to the bottom (after live scrolling). */
   wheelToBottom(): void;
   cols(): number;
+  /** Rows `from`..`to` (numbered as `selection`) as plain text; `to` past the end means the last row. */
+  text(from: number, to: number): string;
 }
 
 export interface TerminalViewProps {
@@ -45,6 +47,11 @@ export interface TerminalViewProps {
   onRemoteScroll(notches: number, down: Uint8Array | null): void;
   onTouchStart(): void;
   onFocusChange(focused: boolean): void;
+  /** Select mode: taps pick rows instead of opening the keyboard. */
+  selecting: boolean;
+  selection: { from: number; to: number } | null;
+  /** A tap in select mode, on this row (history rows first, then the live screen). */
+  onSelectRow(row: number): void;
 }
 
 const TERM_VARS = [
@@ -119,6 +126,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       width,
       height,
       focused: focused.current,
+      selection: p.current.selection,
     });
   }, [renderer, picture]);
 
@@ -312,7 +320,14 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       .onBegin(() => {
         ignored.current = overTerminal();
       })
-      .onEnd(() => !ignored.current && showKeyboard());
+      .onEnd((e) => {
+        if (ignored.current) return;
+        if (!p.current.selecting) return showKeyboard();
+        const h = p.current.historyMode ? p.current.history.length : 0;
+        const cellH = renderer?.cellH ?? 16;
+        const row = Math.floor(h - (p.current.historyMode ? scrollPx.current : 0) / cellH + e.y / cellH);
+        p.current.onSelectRow(Math.min(Math.max(row, 0), h + grid.current.rows - 1));
+      });
     const longPress = Gesture.LongPress()
       .runOnJS(true)
       .minDuration(450)
@@ -385,7 +400,13 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       setNotches(0);
     },
     cols: () => grid.current.cols,
+    text: (from, to) => {
+      const rows = [...(p.current.historyMode ? p.current.history : []), ...(screen.current?.lines ?? [])];
+      return rowsText(rows.slice(from, to + 1));
+    },
   }));
+
+  useEffect(redraw, [props.selection, redraw]);
 
   // Android can leave Skia's surface without a GL context once the app has been in the background
   // (the screen locked), and every frame after that draws nothing. A fresh Canvas draws again.

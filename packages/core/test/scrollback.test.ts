@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { historyAbove, layoutScrollback, MAX_HISTORY_ROWS } from "../src/term/scrollback.ts";
+import { historyAbove, layoutScrollback, MAX_HISTORY_ROWS, rowsText } from "../src/term/scrollback.ts";
 import { Attr, has, PLAIN, type Cell } from "../src/term/style.ts";
 
 const text = (row: readonly Cell[]) => row.filter((c) => c.width !== 0).map((c) => c.text || " ").join("").trimEnd();
@@ -45,5 +45,15 @@ describe("historyAbove", () => {
   it("cuts the visible screen off the end of a recent read", () => {
     expect(historyAbove("a\r\nb\r\nc\r\nd\r\n", "c\r\nd\r\n")).toEqual(["a", "b"]);
     expect(historyAbove("c\nd", "c\nd")).toEqual([]);
+  });
+});
+
+describe("rowsText", () => {
+  it("joins rows as lines, trimming trailing spaces and blank rows", () => {
+    expect(rowsText(layoutScrollback(["ab  ", "", "c", "", ""], 10))).toBe("ab\n\nc");
+  });
+
+  it("writes a wide glyph once", () => {
+    expect(rowsText(layoutScrollback(["界x"], 10))).toBe("界x");
   });
 });

@@ -1,5 +1,5 @@
 import { tabName, type Agent, type Pane, type Tab, type Workspace } from "@moshlet/core";
-import { ChevronDown, History, LayoutGrid, Menu, Plus } from "lucide-react-native";
+import { ChevronDown, ClipboardCopy, History, TextSelect, LayoutGrid, Menu, Plus } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -33,6 +33,9 @@ export function TopBar(props: {
   onOpenTab(tabId: string): void;
   onNewTab(): void;
   onHistory(): void;
+  onCopyReply(): void;
+  selecting: boolean;
+  onSelect(): void;
   onPaneMap(): void;
 }) {
   const title = props.agent ? (props.agent.name ?? props.agent.agent) : shortCwd(props.pane?.foreground_cwd ?? props.pane?.cwd) || "terminal";
@@ -91,6 +94,8 @@ export function TopBar(props: {
         </DropdownMenuContent>
       </DropdownMenu>
       <LinkIndicator conn={props.conn} />
+      {props.agent?.agent === "claude" && <IconButton icon={ClipboardCopy} label="Copy Claude's last reply" size={36} onPress={props.onCopyReply} />}
+      <IconButton icon={TextSelect} label="Select text to copy" size={36} active={props.selecting} onPress={props.onSelect} />
       <IconButton icon={History} label="History" size={36} active={props.historyMode} onPress={props.onHistory} />
       <Pill label={`${props.paneIndex}/${props.paneCount}`} onPress={props.onPaneMap} height={36} tone="muted" icon={LayoutGrid} />
     </View>

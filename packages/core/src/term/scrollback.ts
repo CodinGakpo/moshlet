@@ -40,3 +40,10 @@ function displayWidth(s: string): number {
   }
   return w;
 }
+
+/** Terminal rows as plain text: one line per row, trailing spaces and trailing blank rows dropped. */
+export function rowsText(rows: readonly (readonly Cell[])[]): string {
+  const lines = rows.map((row) => row.filter((c) => c.width !== 0).map((c) => c.text || " ").join("").trimEnd());
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines.join("\n");
+}

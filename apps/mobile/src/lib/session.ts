@@ -4,6 +4,8 @@ import {
   ShellError,
   historyAbove,
   layoutScrollback,
+  lastClaudeReply,
+  lastClaudeSessionCommand,
   linkNeverHeard,
   MoshClient,
   Sealer,
@@ -19,6 +21,7 @@ import {
   type SplitDirection,
 } from "@moshlet/core";
 import { AppState, type AppStateStatus } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import * as Network from "expo-network";
 import { alerts, nativeUdp, setLowLatencyWifi } from "../../modules/moshlet-native";
 import { forgetDeviceKey, type HostKey, type SshConnection } from "../../modules/moshlet-native/ssh";
@@ -610,6 +613,25 @@ export class HostSession {
 
   closeHistory(): void {
     this.update({ historyMode: false });
+  }
+
+  /** Copies Claude Code's last reply in the shown pane, read from its newest session file for the pane's folder. */
+  async copyLastReply(): Promise<void> {
+    const paneId = get().paneId;
+    const snap = get().snapshot;
+    const cwd = paneId && snap ? agentIn(snap, paneId)?.cwd : undefined;
+    if (!this.conn || !cwd) return toast("No Claude Code session found for this pane.");
+    try {
+      const r = await this.conn.exec(lastClaudeSessionCommand(cwd), { timeoutMs: 20_000 });
+      if (r.status === 3) return toast(`No Claude Code session file for ${cwd}.`);
+      if (r.status !== 0) throw new Error(r.stderr.trim() || `exit ${r.status}`);
+      const reply = lastClaudeReply(r.stdout);
+      if (!reply) return toast("Claude Code has no finished reply here yet.");
+      await Clipboard.setStringAsync(reply);
+      toast(`Copied Claude's last reply (${reply.length} characters).`);
+    } catch (e) {
+      toast(`Copy reply: ${(e as Error).message}`);
+    }
   }
 
   // ---------------------------------------------------------------- actions
